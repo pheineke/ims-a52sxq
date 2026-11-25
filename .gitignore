@@ -23,3 +23,9 @@ keys/*.pk8
 keys/*.pem
 keys/*.jks
 keys/*.keystore
+
+# a52sxq: local, device-specific or secret build inputs
+/sdk/
+/a52sxq/platform/
+/a52sxq/zip/keys/
+/a52sxq/zip/out/

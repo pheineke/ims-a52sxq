@@ -1,0 +1,19 @@
+# PhhIms VoLTE package for LineageOS a52sxq.
+#
+# The Samsung sm7325 audio HAL wrapper busy-waits in setMode(IN_CALL) until
+# vendor.calls.slot_id<N> is "1", which only the Samsung RIL sets, and only for CS
+# calls. PhhIms (domain priv_app) may not set vendor properties, so it publishes
+# phhims.call.slot<N> and init mirrors it.
+on property:phhims.call.slot0=1
+    setprop vendor.calls.slot_id0 1
+on property:phhims.call.slot0=0
+    setprop vendor.calls.slot_id0 0
+on property:phhims.call.slot1=1
+    setprop vendor.calls.slot_id1 1
+on property:phhims.call.slot1=0
+    setprop vendor.calls.slot_id1 0
+
+# Expose VoLTE regardless of the carrier config shipped for the SIM.
+on boot
+    setprop persist.dbg.volte_avail_ovr 1
+    setprop persist.dbg.allow_ims_off 1

@@ -1,0 +1,168 @@
+#!/sbin/sh
+#
+# PhhIms VoLTE package for LineageOS on the Galaxy A52s 5G (a52sxq).
+# Installs krazey/ims (me.phh.ims, a userspace SIP/IMS stack) as a privileged system
+# app plus the configuration it needs on this device. Mount logic follows MindTheGapps.
+#
+# @MODE@ is replaced at build time: "install" or "uninstall".
+
+OUTFD="/proc/self/fd/$2"
+ZIP="$3"
+MODE="@MODE@"
+TARGET_DEVICE="a52sxq"
+TARGET_LINEAGE="@LINEAGE_VERSION@"   # major.minor, e.g. 24.0
+
+ui_print() {
+  echo "ui_print $1" > "$OUTFD"
+  echo "ui_print" > "$OUTFD"
+}
+
+getprop2() { grep -m 1 "^$2=" "$1" | cut -d= -f2; }
+
+TMP=/tmp/phhims
+SYSTEM_MNT=/mnt/system
+
+cleanup() {
+  cd /
+  rm -rf "$TMP"
+  umount -l "$SYSTEM_MNT" 2>/dev/null
+  umount -l /product 2>/dev/null
+  umount -l /system_ext 2>/dev/null
+}
+
+abort() {
+  ui_print "ERROR: $1"
+  cleanup
+  exit 1
+}
+
+get_block_for_mount_point() {
+  grep -v "^#" /etc/recovery.fstab | grep "[[:blank:]]$1[[:blank:]]" | tail -n1 | tr -s '[:blank:]' ' ' | cut -d' ' -f1
+}
+
+find_block() {
+  local name="$1"
+  local entry=$(get_block_for_mount_point "/$name")
+  [ -z "$entry" ] && [ "$name" = "system" ] && entry=$(get_block_for_mount_point "/")
+  [ -z "$entry" ] && [ "$name" = "system" ] && entry=$(get_block_for_mount_point "/system_root")
+  local dev
+  if [ "$DYNAMIC_PARTITIONS" = "true" ]; then
+    if [ -n "$entry" ]; then dev="/dev/block/mapper/${entry}${SLOT_SUFFIX}"; else dev="/dev/block/mapper/${name}${SLOT_SUFFIX}"; fi
+  else
+    if [ -n "$entry" ]; then dev="${entry}${SLOT_SUFFIX}"; else dev="/dev/block/bootdevice/by-name/${name}${SLOT_SUFFIX}"; fi
+  fi
+  [ -b "$dev" ] && echo "$dev"
+}
+
+ui_print "*******************************"
+ui_print " PhhIms VoLTE for LineageOS"
+ui_print " Galaxy A52s 5G (a52sxq)  [$MODE]"
+ui_print "*******************************"
+
+rm -rf "$TMP"; mkdir -p "$TMP"
+cd "$TMP" || abort "cannot use $TMP"
+unzip -o "$ZIP" > /dev/null || abort "cannot extract package"
+rm -rf META-INF
+
+ui_print "Mounting partitions"
+umount /system 2>/dev/null; umount "$SYSTEM_MNT" 2>/dev/null
+umount /product 2>/dev/null; umount /system_ext 2>/dev/null
+DYNAMIC_PARTITIONS=$(getprop ro.boot.dynamic_partitions)
+SLOT_SUFFIX=$(getprop ro.boot.slot_suffix)
+SYSTEM_BLOCK=$(find_block system)
+PRODUCT_BLOCK=$(find_block product)
+SYSTEM_EXT_BLOCK=$(find_block system_ext)
+[ -n "$SYSTEM_BLOCK" ] || abort "system partition not found"
+if [ "$DYNAMIC_PARTITIONS" = "true" ]; then
+  for b in "$SYSTEM_BLOCK" "$PRODUCT_BLOCK" "$SYSTEM_EXT_BLOCK"; do [ -n "$b" ] && blockdev --setrw "$b"; done
+fi
+mkdir -p "$SYSTEM_MNT"
+mount -o rw "$SYSTEM_BLOCK" "$SYSTEM_MNT" || abort "cannot mount system read-write"
+S="$SYSTEM_MNT/system"
+[ -L "$S/product" ] || PRODUCT_BLOCK=""
+[ -L "$S/system_ext" ] || SYSTEM_EXT_BLOCK=""
+if [ -n "$PRODUCT_BLOCK" ]; then
+  mkdir -p /product; mount -o rw "$PRODUCT_BLOCK" /product || abort "cannot mount product read-write"
+fi
+if [ -n "$SYSTEM_EXT_BLOCK" ]; then
+  mkdir -p /system_ext; mount -o rw "$SYSTEM_EXT_BLOCK" /system_ext || abort "cannot mount system_ext read-write"
+fi
+
+ui_print "Checking ROM"
+# Like backuptool's check_prereq: LineageOS props live in system or product build.prop.
+P=/product; [ -n "$PRODUCT_BLOCK" ] || P="$S/product"
+DEVICE=$(cat "$S/build.prop" "$P/etc/build.prop" 2>/dev/null | grep -m 1 '^ro.lineage.device=' | cut -d= -f2)
+VERSION=$(cat "$S/build.prop" "$P/etc/build.prop" 2>/dev/null | grep -m 1 '^ro.lineage.version=' | cut -d= -f2)
+[ "$DEVICE" = "$TARGET_DEVICE" ] || abort "this package is for $TARGET_DEVICE, found '${DEVICE:-not LineageOS}'"
+case "$VERSION" in
+  "$TARGET_LINEAGE"*) ;;
+  *) abort "this package is for LineageOS $TARGET_LINEAGE, found ${VERSION:-unknown}" ;;
+esac
+ui_print "  LineageOS $VERSION on $DEVICE"
+
+# Files owned by this package, relative to $S ("product/..." resolves via the symlink).
+FILES=$(cat "$TMP/files.list")
+
+if [ "$MODE" = "uninstall" ]; then
+  ui_print "Removing sepolicy snippet"
+  sh "$S/etc/phhims/phhims-sepolicy.sh" remove "$S" 2>&1 | while read -r l; do ui_print "  $l"; done
+  ui_print "Removing files"
+  for f in $FILES; do rm -f "$S/$f"; done
+  rmdir "$S/priv-app/PhhIms" "$S/etc/phhims" 2>/dev/null
+  rm -f "$S/addon.d/50-phhims.sh"
+  ui_print "Done. VoLTE removed; calls use 2G again."
+  cleanup
+  exit 0
+fi
+
+ui_print "Checking free space"
+NEED_KB=$(du -sk "$TMP/system" | cut -f1)
+FREE_KB=$(df -k "$SYSTEM_MNT" | tail -1 | tr -s ' ' | cut -d' ' -f4)
+[ "$FREE_KB" -gt $((NEED_KB + 10240)) ] || abort "not enough space on system (${FREE_KB} KB free)"
+
+ui_print "Copying files"
+for f in $FILES; do
+  src="$TMP/system/$f"
+  dst="$S/$f"
+  [ -f "$src" ] || abort "package is missing $f"
+  mkdir -p "$(dirname "$dst")"
+  cp -f "$src" "$dst.phhims-new" || abort "cannot write $dst"
+  mv -f "$dst.phhims-new" "$dst"
+  chown root:root "$dst"
+  case "$f" in *.sh) chmod 0755 "$dst" ;; *) chmod 0644 "$dst" ;; esac
+  chcon u:object_r:system_file:s0 "$dst"
+  # Recovery's clock is often years behind. PackageManager trusts its package cache
+  # while the cache entry is newer than the APK, so an update over an existing path
+  # would be ignored. A fixed future mtime always forces a fresh parse.
+  touch -d "2037-12-31 00:00:00" "$dst"
+done
+for d in "$S/priv-app/PhhIms" "$S/etc/phhims"; do
+  chown root:root "$d"; chmod 0755 "$d"; chcon u:object_r:system_file:s0 "$d"
+  # For directory packages the package cache is validated against the directory mtime.
+  touch -d "2037-12-31 00:00:00" "$d"
+done
+
+ui_print "Installing addon.d (survives $TARGET_LINEAGE updates)"
+{
+  sed -n '1,/^@FILE_LIST@$/p' "$TMP/addon.d.template" | sed '$d'
+  for f in $FILES; do echo "$f"; done
+  sed -n '/^@FILE_LIST@$/,$p' "$TMP/addon.d.template" | sed '1d'
+} > "$S/addon.d/50-phhims.sh"
+chmod 0755 "$S/addon.d/50-phhims.sh"; chcon u:object_r:system_file:s0 "$S/addon.d/50-phhims.sh"
+
+ui_print "Applying sepolicy snippet"
+sh "$S/etc/phhims/phhims-sepolicy.sh" apply "$S" > "$TMP/sepolicy.log" 2>&1
+RC=$?
+while read -r l; do ui_print "  $l"; done < "$TMP/sepolicy.log"
+if [ $RC -ne 0 ]; then
+  # Without the snippet the app cannot signal calls and would hang the audio HAL:
+  # do not make it the IMS service.
+  rm -f "$S/product/overlay/PhhImsPhoneOverlay.apk"
+  abort "sepolicy snippet could not be applied (VoLTE left disabled)"
+fi
+
+sync
+ui_print "Done. First boot recompiles sepolicy (a few seconds longer)."
+ui_print "VoLTE registers after boot; check *#*#4636#*#* > Phone info."
+cleanup
+exit 0

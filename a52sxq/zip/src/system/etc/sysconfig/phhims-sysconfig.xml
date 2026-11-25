@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- a52sxq-proto: not platform-signed, so allow hidden API use for this one system app -->
+<config>
+    <hidden-api-whitelisted-app package="me.phh.ims" />
+</config>

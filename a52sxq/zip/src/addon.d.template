@@ -1,0 +1,54 @@
+#!/sbin/sh
+#
+# ADDOND_VERSION=3
+#
+# /system/addon.d/50-phhims.sh
+# PhhIms VoLTE package for LineageOS a52sxq: keeps the IMS app, its configuration and
+# its sepolicy snippet across LineageOS updates of the same major.minor version.
+# backuptool refuses to restore across major versions (check_prereq), which is
+# intended: the app is built against this Android version's telephony internals.
+#
+
+. /tmp/backuptool.functions
+
+list_files() {
+cat <<EOF
+@FILE_LIST@
+EOF
+}
+
+# Sepolicy snippet stored next to this script, re-applied after the update replaced
+# the policy files (see phhims-sepolicy.sh).
+SEPOLICY_TOOL=$S/etc/phhims/phhims-sepolicy.sh
+
+case "$1" in
+  backup)
+    list_files | while read FILE DUMMY; do
+      backup_file $S/"$FILE"
+    done
+  ;;
+  restore)
+    list_files | while read FILE REPLACEMENT; do
+      R=""
+      [ -n "$REPLACEMENT" ] && R="$S/$REPLACEMENT"
+      [ -f "$C/$S/$FILE" ] && restore_file $S/"$FILE" "$R"
+    done
+  ;;
+  pre-backup)
+    # Stub
+  ;;
+  post-backup)
+    # Stub
+  ;;
+  pre-restore)
+    # Stub
+  ;;
+  post-restore)
+    # Without the snippet the app cannot signal calls to the audio HAL: in that case
+    # do not make it the IMS service, calls then use 2G as on a stock LineageOS build.
+    if ! { [ -f "$SEPOLICY_TOOL" ] && sh "$SEPOLICY_TOOL" apply "$S"; }; then
+      echo "PhhIms: sepolicy re-apply failed, disabling VoLTE"
+      rm -f "$S/product/overlay/PhhImsPhoneOverlay.apk"
+    fi
+  ;;
+esac

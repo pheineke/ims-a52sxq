@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Samsung sm7325 audio HAL: MODE_IN_CALL is the modem voice path. PhhIms plays and
+         records audio itself, so IMS calls must use MODE_IN_COMMUNICATION. -->
+    <bool name="config_use_voip_mode_for_ims">true</bool>
+    <bool name="config_device_volte_available">true</bool>
+    <bool name="config_carrier_volte_available">true</bool>
+    <!-- PhhIms reads the serving cell for P-Access-Network-Info; system uid was exempt from
+         LocationAccessPolicy, a privileged app needs this list to work with location off.
+         Overlays replace arrays: keep the stock entry. -->
+    <string-array name="config_serviceStateLocationAllowedPackages" translatable="false">
+        <item>com.android.phone</item>
+        <item>me.phh.ims</item>
+    </string-array>
+</resources>
