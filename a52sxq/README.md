@@ -1,10 +1,11 @@
-# VoLTE on LineageOS for the Galaxy A52s 5G (a52sxq)
+# VoLTE and Wi-Fi calling on LineageOS for the Galaxy A52s 5G (a52sxq)
 
 This branch brings voice over LTE to the official LineageOS build for the Samsung Galaxy
 A52s 5G (SM-A528B, `a52sxq`, Snapdragon 778G / SM7325). It uses the open-source userspace
 IMS stack from [krazey/ims](https://github.com/krazey/ims) (package `me.phh.ims`), adapted
 so it can be installed on an **unmodified, officially signed** LineageOS build with a
-recovery zip, the same way GApps are installed.
+recovery zip, the same way GApps are installed. The zip also carries AOSP's Wi-Fi calling
+components (Iwlan and QualifiedNetworksService), built for the same build.
 
 > [!WARNING]
 > Experimental. Read [Be careful about](#be-careful-about) before flashing anything.
@@ -18,6 +19,8 @@ recovery zip, the same way GApps are installed.
 | Outgoing VoLTE call | works on 1&1: HD (AMR-WB), two-way audio, mobile data during the call |
 | Incoming VoLTE call | rings and can be answered; audio after the audio-HAL fix **not verified yet** |
 | Calls on LIDL Connect | not tested yet (registration only) |
+| **Wi-Fi calling** (IKEv2/IPsec to the ePDG, IMS over IWLAN) | works on 1&1: registration and outgoing calls, also in airplane mode and after booting in airplane mode |
+| Wi-Fi calling: incoming calls, LTE ⇄ Wi-Fi handover during a call, LIDL Connect | not tested yet |
 | Location off, update via `addon.d`, uninstall zip | not tested yet |
 
 Why bother: LineageOS has no IMS stack on Samsung devices, because Samsung's IMS service
@@ -75,8 +78,16 @@ o2 by year end). After that, a phone without VoLTE cannot make or receive normal
 - **Not certified.** Carriers never approved this stack. It may stop registering, behave
   differently on other carriers, or be blocked. Your carrier must provision VoLTE for your
   SIM; 1&1 and Vodafone-network SIMs registered here, others are untested on this device.
-- **Not done:** VoWiFi (no Iwlan/QNS on the ROM), video calls, conference calls, RCS. Audio
-  can be a little choppy (jitter concealment), echo cancellation is off by default.
+- **Wi-Fi calling and emergency calls.** Emergency calls are never placed over Wi-Fi by this
+  package. With mobile coverage, Android dials them over the cellular network as before (in
+  airplane mode it turns the radio back on for an emergency call). Without any mobile
+  coverage, an emergency call is not possible, even if Wi-Fi calling works.
+- **Wi-Fi calling needs one adb command** after a fresh install (see [Installing](#installing)).
+  Until it is run, keep Wi-Fi calling switched off.
+- **VPNs.** QNS (which decides between LTE and Wi-Fi) looks at the default network. With an
+  always-on VPN it once failed to classify the Wi-Fi link and kept IMS on LTE until a reboot.
+- **Not done:** video calls, conference calls, RCS. Audio can be a little choppy (jitter
+  concealment), echo cancellation is off by default.
 
 ## Installing
 
@@ -88,6 +99,16 @@ o2 by year end). After that, a phone without VoLTE cannot make or receive normal
 4. Reboot. The first boot takes a few seconds longer (policy compilation).
 5. Check: VoLTE should register within a minute; the dialer shows **HD** during calls and
    mobile data keeps working. `*#*#4636#*#*` → Phone info shows IMS status too.
+6. For Wi-Fi calling, run this once with USB debugging enabled (no root needed), then switch
+   on Settings → Network & internet → SIMs → *your SIM* → Wi-Fi calling:
+
+   ```sh
+   adb shell appops set com.google.android.iwlan MANAGE_IPSEC_TUNNELS allow
+   ```
+
+   `MANAGE_IPSEC_TUNNELS` is a `signature|appop` permission. Without the platform key a
+   privileged app cannot simply be granted it, and a recovery zip cannot set app-ops. The
+   setting survives reboots and updates, but not a factory reset.
 
 To remove: sideload `PhhIms-VoLTE-a52sxq-lineage-24.0-uninstall.zip` the same way.
 
@@ -171,6 +192,35 @@ precompiled fast path exactly.
 - On this build `ro.lineage.version` is in `/product/etc/build.prop`, not
   `/system/build.prop`.
 
+### Wi-Fi calling
+
+The zip adds AOSP [Iwlan](https://android.googlesource.com/platform/packages/services/Iwlan)
+(IWLAN data/network service: ePDG selection, IKEv2/EAP-AKA, IPsec tunnel) and
+[QualifiedNetworksService](https://android.googlesource.com/platform/packages/services/QualifiedNetworksService)
+(decides between cellular and Wi-Fi) from `android17-release`, built against the device
+framework (`a52sxq/vowifi/`). The framework RRO names them in
+`config_qualified_networks_service_package` and `config_wlan_{data,network}_service_package`.
+
+Changes needed on this device:
+
+- **Iwlan crashed on the carrier's IPsec algorithms.** 1&1 proposes AES-XCBC (integrity
+  `5,2,12,13,14`). The kernel has `xcbc(aes)`, but `IpSecAlgorithm` only reports algorithms
+  that are mandatory for the device's launch API (30 here) plus
+  `config_optionalIpSecAlgorithms`, which was empty, and the IKE library threw
+  `IllegalArgumentException`. The RRO now lists `xcbc(aes)` and `cmac(aes)`, and Iwlan skips
+  any child SA algorithm `ChildSaProposal` does not support instead of crashing
+  (`a52sxq/vowifi/patches/iwlan/`).
+- **1&1 rejects Wi-Fi calls without access information** (`603 Decline`). PhhIms sent no
+  `P-Access-Network-Info` over IWLAN. It now sends `IEEE-802.11` and, if a cell was seen,
+  `Cellular-Network-Info` with the last LTE cell and its age (3GPP TS 24.229), and 1&1 has a
+  carrier policy entry (`sip_carrier_policies.xml`).
+- **Booting in airplane mode.** IWLAN can make IMS "ready" before the SIM records are loaded;
+  the SIP handler then registered without an IMSI forever. `onFeatureReady` now waits until
+  the IMSI is readable.
+- Build-time pieces that Soong normally generates are replaced (`a52sxq/vowifi/stubs/`): the
+  aconfig flags (all off, as in the Android 17 release configs), no-op statsd loggers, and
+  two DNS helper classes copied from Connectivity and relocated like Iwlan's jarjar rule.
+
 ## Building
 
 Requirements: a Linux PC, Android SDK with `platforms;android-33`, build-tools and NDK
@@ -189,7 +239,11 @@ D2J=/path/to/dex-tools/d2j-dex2jar.sh ./a52sxq/tools/pull-device-framework.sh
 # 2. Project-local SDK in ./sdk with the IMS stubs removed from android-33 (gitignored).
 ANDROID_HOME=/path/to/android-sdk ./a52sxq/tools/make-local-sdk.sh
 
-# 3. App, overlays, both zips. Generates your own signing key on first run.
+# 3. SDK for the Java-only Iwlan/QNS build: the device framework *as* android.jar.
+ANDROID_HOME=/path/to/android-sdk ./a52sxq/tools/make-vowifi-sdk.sh
+
+# 4. App, Iwlan, QNS, overlays, both zips. Fetches AOSP Iwlan/QNS at the pinned commits
+#    (a52sxq/vowifi/fetch-aosp.sh) and generates your own signing key on first run.
 JAVA_HOME=/path/to/jdk-17 ./a52sxq/zip/build-zip.sh
 ls a52sxq/zip/out/*.zip
 ```
@@ -204,7 +258,11 @@ Changes to the app compared with upstream (see the commits on this branch):
 - `AndroidManifest.xml`: no `sharedUserId`; `INTERNET`, location, `MODIFY_PHONE_STATE`,
   `CONNECTIVITY_USE_RESTRICTED_NETWORKS`.
 - `CallSlotSignal.kt` (new), hooked up in `PhhImsService.kt`; voice capability is dropped
-  in `PhhMmTelFeature.kt` when the signal cannot be published.
+  in `PhhMmTelFeature.kt` when the signal cannot be published. It also remembers the last
+  LTE cell for `Cellular-Network-Info`.
+- `SipAccessNetworkHeaders.kt`: access headers for INVITEs over IWLAN.
+- `PhhMmTelFeature.kt`: waits for a readable IMSI before creating the SIP handler.
+- `sip_carrier_policies.xml`: 1&1 Germany sends `P-Access-Network-Info`.
 
 ## Troubleshooting
 
@@ -238,6 +296,12 @@ adb logcat -d | grep -E 'TimeCheck timeout|SimCallFocusState|VoipCallFocusState'
   give the reason.
 - **Package changes not picked up:** stale package cache; check that the installed
   files and `/system/priv-app/PhhIms` have the 2037 mtime.
+- **Wi-Fi calling does not come up:** check the app-op (`adb shell appops get
+  com.google.android.iwlan MANAGE_IPSEC_TUNNELS`), that QNS moved IMS
+  (`setPreferredTransports: apnType=ims, transport=WLAN`), and Iwlan's
+  `EpdgTunnelManager` lines (`Tunnel opened`, or the IKE error).
+- **Wi-Fi call ends instantly:** look at the SIP response to the INVITE. `603 Decline`
+  within a few hundred milliseconds came from missing access headers on 1&1.
 
 ## How we got here
 

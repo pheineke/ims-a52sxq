@@ -1,4 +1,4 @@
-> **This is the `a52sxq` branch:** VoLTE for the Galaxy A52s 5G on an official
+> **This is the `a52sxq` branch:** VoLTE and Wi-Fi calling for the Galaxy A52s 5G on an official
 > LineageOS 24.0 build, installed as a recovery zip. See
 > **[a52sxq/README.md](a52sxq/README.md)** for installation, how it works and what to be
 > careful about. The upstream project is [krazey/ims](https://github.com/krazey/ims);
