@@ -230,6 +230,8 @@ class PhhMmTelFeature(
 
     var telephonyManager: TelephonyManager? = null
     private val readyCheckHandler = Handler(Looper.getMainLooper())
+    private var imsiWaitAttempts = 0
+    private val imsiWaitRetry = Runnable { onFeatureReady() }
     private var readyCheckExecutor = Executors.newSingleThreadExecutor()
     private var readyCheckCallback: TelephonyCallback? = null
     private var readyCheckAttempts = 0
@@ -1054,10 +1056,25 @@ class PhhMmTelFeature(
             Rlog.w(TAG, "$slotId cannot read IMSI yet: ${t.message}")
             false
         }
+        readyCheckHandler.removeCallbacks(imsiWaitRetry)
         if (!imsiReadable) {
-            Rlog.w(TAG, "$slotId onFeatureReady before the IMSI is readable; retrying in 2s")
-            readyCheckHandler.postDelayed({ onFeatureReady() }, 2000)
+            // Cheap local check (no SIM or network access). Back off to every 10 s so a SIM
+            // left waiting for its PIN is not polled every 2 s, and log only now and then.
+            val attempt = ++imsiWaitAttempts
+            val delayMs = minOf(2_000L shl minOf(attempt - 1, 3), 10_000L)
+            if (attempt == 1 || attempt % 30 == 0) {
+                Rlog.w(
+                    TAG,
+                    "$slotId onFeatureReady before the IMSI is readable " +
+                        "(attempt $attempt); retrying in ${delayMs}ms",
+                )
+            }
+            readyCheckHandler.postDelayed(imsiWaitRetry, delayMs)
             return
+        }
+        if (imsiWaitAttempts > 0) {
+            Rlog.i(TAG, "$slotId IMSI readable after $imsiWaitAttempts retries")
+            imsiWaitAttempts = 0
         }
 
         if (
