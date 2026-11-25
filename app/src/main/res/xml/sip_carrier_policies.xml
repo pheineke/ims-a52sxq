@@ -22,6 +22,13 @@
             value="&quot;ims.mnc010.mcc219.3gppnetwork.org&quot;" />
     </carrier>
 
+    <!-- 1&1 Germany (also sim24 and other 1&1 brands). Rejects Wi-Fi calls with 603 Decline
+         when the INVITE carries no access/location information: send P-Access-Network-Info
+         (and Cellular-Network-Info on IWLAN, 3GPP TS 24.229 7.2A.15). Tested on a52sxq. -->
+    <carrier mccmnc="262023" name="1&amp;1 Germany">
+        <string name="outgoing_pani_policy" value="LTE_CELL_IDENTITY" />
+    </carrier>
+
     <!-- AOSP canonical carrierId 1344. -->
     <carrier mccmnc="232005" name="3 Austria">
         <string-array name="force_csfb_dial_strings">

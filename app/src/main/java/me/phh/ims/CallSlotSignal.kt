@@ -6,10 +6,12 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemProperties
 import android.telephony.Rlog
+import android.telephony.ServiceState
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import java.util.concurrent.Executor
+import me.phh.sip.SipAccessNetworkHeaders
 
 /**
  * Publishes "a call is active on SIM slot N" as phhims.call.slot<N>=1/0.
@@ -96,7 +98,13 @@ class CallSlotSignal(private val context: Context) {
             callbacks.remove(subId)?.let { (_, old) ->
                 telephonyManager.createForSubscriptionId(subId).unregisterTelephonyCallback(old)
             }
-            val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
+            val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener,
+                TelephonyCallback.ServiceStateListener {
+                // Keeps the last LTE cell for Cellular-Network-Info on Wi-Fi calls.
+                override fun onServiceStateChanged(serviceState: ServiceState) {
+                    SipAccessNetworkHeaders.rememberServiceState(serviceState)
+                }
+
                 override fun onCallStateChanged(state: Int) {
                     when (state) {
                         TelephonyManager.CALL_STATE_OFFHOOK -> publish(slot, true, "offhook subId=$subId")
