@@ -151,12 +151,16 @@ class PhhMmTelFeature(
                 recomputeEnabledMmTelCapabilitiesLocked()
             }
         }
-        val finalCapabilities = configuredCapabilities or
+        var finalCapabilities = configuredCapabilities or
             if (sipRegistrationReadyForCapabilities) {
                 MmTelCapabilities.CAPABILITY_TYPE_SMS
             } else {
                 0
             }
+        if (!CallSlotSignal.usable) {
+            // a52sxq: without the call-slot flag the audio HAL hangs on IN_CALL.
+            finalCapabilities = finalCapabilities and MmTelCapabilities.CAPABILITY_TYPE_VOICE.inv()
+        }
         Rlog.i(
             TAG,
             "Final MMTEL capabilities=$finalCapabilities registrationTech=$registrationTech " +

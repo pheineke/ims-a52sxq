@@ -31,6 +31,7 @@ class PhhImsService : ImsService() {
     private val mmTelFeaturesBySlot = mutableMapOf<Int, PhhMmTelFeature>()
     private val configsBySlot = mutableMapOf<Int, PhhImsConfig>()
     private val imsRegistrationsBySlot = mutableMapOf<Int, ImsRegistrationImplBase>()
+    private var callSlotSignal: CallSlotSignal? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -42,6 +43,7 @@ class PhhImsService : ImsService() {
         registerReceiver(receiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
         receiverRegistered = true
         armPeriodicRegisterAlarm()
+        callSlotSignal = CallSlotSignal(this).also { it.start() }
     }
 
     private fun periodicRegisterPendingIntent(): PendingIntent {
@@ -185,6 +187,8 @@ class PhhImsService : ImsService() {
 
     override fun onDestroy() {
         Rlog.d(TAG, "onDestroy")
+        callSlotSignal?.stop()
+        callSlotSignal = null
 
         val features = synchronized(stateLock) {
             val snapshot = mmTelFeaturesBySlot.values.toList()
