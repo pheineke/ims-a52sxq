@@ -17,10 +17,10 @@ components (Iwlan and QualifiedNetworksService), built for the same build.
 | --- | --- |
 | IMS registration (AKA + IPsec) | works with 1&1 (sim24 brand, 1&1 network with Vodafone national roaming) and LIDL Connect (Vodafone) |
 | Outgoing VoLTE call | works on 1&1: HD (AMR-WB), two-way audio, mobile data during the call |
-| Incoming VoLTE call | rings and can be answered; audio after the audio-HAL fix **not verified yet** |
+| Incoming VoLTE call | should work like incoming Wi-Fi calls (same `200 OK` fix), **not verified on LTE yet** |
 | Calls on LIDL Connect | not tested yet (registration only) |
-| **Wi-Fi calling** (IKEv2/IPsec to the ePDG, IMS over IWLAN) | works on 1&1: registration and outgoing calls, also in airplane mode and after booting in airplane mode |
-| Wi-Fi calling: incoming calls, LTE ⇄ Wi-Fi handover during a call, LIDL Connect | not tested yet |
+| **Wi-Fi calling** (IKEv2/IPsec to the ePDG, IMS over IWLAN) | works on 1&1: registration, outgoing and incoming calls, also in airplane mode and after booting in airplane mode (SIM PIN prompt included) |
+| Wi-Fi calling: LTE ⇄ Wi-Fi handover during a call, LIDL Connect | not tested yet |
 | Location off, update via `addon.d`, uninstall zip | not tested yet |
 
 Why bother: LineageOS has no IMS stack on Samsung devices, because Samsung's IMS service
@@ -214,9 +214,14 @@ Changes needed on this device:
   `P-Access-Network-Info` over IWLAN. It now sends `IEEE-802.11` and, if a cell was seen,
   `Cellular-Network-Info` with the last LTE cell and its age (3GPP TS 24.229), and 1&1 has a
   carrier policy entry (`sip_carrier_policies.xml`).
-- **Booting in airplane mode.** IWLAN can make IMS "ready" before the SIM records are loaded;
-  the SIP handler then registered without an IMSI forever. `onFeatureReady` now waits until
-  the IMSI is readable.
+- **1&1 hangs up answered calls without access information.** The `200 OK` for an incoming
+  call removed the caller's `P-Access-Network-Info` and added none; the network replied with
+  a BYE 180 ms later instead of an ACK. The `200 OK` now carries the same access headers as
+  outgoing INVITEs.
+- **Booting in airplane mode.** IWLAN can make IMS "ready" before the SIM records are loaded
+  (or while the SIM waits for its PIN); the SIP handler then registered without an IMSI
+  forever. `onFeatureReady` now waits until the IMSI is readable (a local check, backing off
+  to every 10 s).
 - Build-time pieces that Soong normally generates are replaced (`a52sxq/vowifi/stubs/`): the
   aconfig flags (all off, as in the Android 17 release configs), no-op statsd loggers, and
   two DNS helper classes copied from Connectivity and relocated like Iwlan's jarjar rule.
@@ -260,7 +265,8 @@ Changes to the app compared with upstream (see the commits on this branch):
 - `CallSlotSignal.kt` (new), hooked up in `PhhImsService.kt`; voice capability is dropped
   in `PhhMmTelFeature.kt` when the signal cannot be published. It also remembers the last
   LTE cell for `Cellular-Network-Info`.
-- `SipAccessNetworkHeaders.kt`: access headers for INVITEs over IWLAN.
+- `SipAccessNetworkHeaders.kt`: access headers for INVITEs over IWLAN, also used for the
+  `200 OK` of incoming calls (`SipIncomingInviteResponses.kt`).
 - `PhhMmTelFeature.kt`: waits for a readable IMSI before creating the SIP handler.
 - `sip_carrier_policies.xml`: 1&1 Germany sends `P-Access-Network-Info`.
 
