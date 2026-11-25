@@ -803,6 +803,21 @@ class PhhMmTelFeature(
                 }
                 mState = State.TERMINATING
                 sipHandler.myHandler.post {
+                    if (!sipHandler.hasDialogFor(outgoingCallSipCallId)) {
+                        // The SIP side already lost this call (e.g. IMS reconnect); nothing will
+                        // report its end, so do it here or the dialer cannot hang up.
+                        Rlog.w(TAG, "No SIP dialog left for this call; ending it locally")
+                        sipHandler.onCancelledCall?.invoke(
+                            Object(),
+                            "local hangup without SIP dialog",
+                            mapOf(
+                                "call-id" to (outgoingCallSipCallId ?: ""),
+                                "outgoingCall" to "true",
+                                "localHangup" to "true",
+                            ),
+                        )
+                        return@post
+                    }
                     sipHandler.terminateCall(outgoingCallSipCallId)
                 }
             }
@@ -997,11 +1012,18 @@ class PhhMmTelFeature(
         val statusMessage = (map["statusString"] as? String) ?: "Kikoo"
         val localReject = map["localReject"] == "true"
         val localHangup = map["localHangup"] == "true"
+        val imsConnectionLost = map["imsConnectionLost"] == "true"
         val remoteNoMediaRelease = map["remoteNoMediaRelease"] == "true"
         val csRetry = map["csRetry"] == "true"
         val imsRetry = map["imsRetry"] == "true"
 
         return when {
+            // Call dropped because the IMS connection went away (no handover possible).
+            imsConnectionLost -> ImsReasonInfo(
+                ImsReasonInfo.CODE_LOCAL_NETWORK_NO_SERVICE,
+                0,
+                statusMessage,
+            )
             imsRetry -> ImsReasonInfo(
                 ImsReasonInfo.CODE_LOCAL_CALL_VOLTE_RETRY_REQUIRED,
                 0,

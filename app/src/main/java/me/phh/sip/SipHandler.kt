@@ -1111,6 +1111,10 @@ fun setRequestCallback(method: SipMethod, cb: (SipRequest) -> Int) {
     }
 
     private fun clearCallAndCallbackStateForReconnect() {
+        // Established calls cannot survive a reconnect (new IMS network, transports closed).
+        // Report them, otherwise Android keeps showing a call that no longer exists and the
+        // user cannot hang up (seen after enabling airplane mode during a VoLTE call).
+        val lostCalls = listOfNotNull(currentCall, heldForegroundCall).distinct()
         stopCallRuntime("IMS reconnect")
         incomingFinalResponseSent.set(false)
         incomingAcceptedAwaitingAck.set(false)
@@ -1127,6 +1131,31 @@ fun setRequestCallback(method: SipMethod, cb: (SipRequest) -> Int) {
         dispatcher.clearCallbacks()
         dispatcher.clearWriters()
         smsHandler.clearState("IMS reconnect")
+        lostCalls.forEach { call ->
+            val lostCallId = call.callIdOrEmpty()
+            Rlog.w(TAG, "Reporting call lost with the IMS connection: callId=$lostCallId outgoing=${call.outgoing}")
+            onCancelledCall?.invoke(
+                Object(),
+                "IMS connection lost",
+                mapOf(
+                    "call-id" to lostCallId,
+                    "outgoingCall" to call.outgoing.toString(),
+                    "imsConnectionLost" to "true",
+                    "statusString" to "IMS connection lost during the call",
+                ),
+            )
+        }
+    }
+
+    /** Whether a SIP dialog or pending INVITE exists for [callId] (any call if null). */
+    fun hasDialogFor(callId: String?): Boolean {
+        val candidates = listOfNotNull(
+            currentCall?.callIdOrEmpty(),
+            heldForegroundCall?.callIdOrEmpty(),
+            pendingOutgoingInvite?.callId,
+            pendingWaitingInvite?.callId,
+        )
+        return if (callId == null) candidates.isNotEmpty() else callId in candidates
     }
 
 
