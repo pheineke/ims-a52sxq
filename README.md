@@ -1,3 +1,9 @@
+> **This is the `a52sxq` branch:** VoLTE for the Galaxy A52s 5G on an official
+> LineageOS 24.0 build, installed as a recovery zip. See
+> **[a52sxq/README.md](a52sxq/README.md)** for installation, how it works and what to be
+> careful about. The upstream project is [krazey/ims](https://github.com/krazey/ims);
+> its README follows unchanged.
+
 # PhhIms - VoLTE/VoWiFi for LineageOS on Samsung devices
 
 Open-source SIP/IMS stack for LineageOS, based on [phhusson/ims](https://github.com/phhusson/ims) and the Samsung-focused fork history from [amikhasenko/ims](https://github.com/amikhasenko/ims).
