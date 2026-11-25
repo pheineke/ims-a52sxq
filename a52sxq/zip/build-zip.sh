@@ -50,6 +50,18 @@ VERSION_NAME=$("$BT/aapt2" dump badging "$APK" | sed -n "s/.*versionName='\([^']
 mkdir -p "$STAGE/system/priv-app/PhhIms"
 sign "$APK" "$STAGE/system/priv-app/PhhIms/PhhIms.apk"
 
+echo "== Wi-Fi calling apps (AOSP Iwlan + QNS, see a52sxq/vowifi)"
+VW=$REPO/a52sxq/vowifi
+[ -d "$VW/aosp/iwlan" ] || "$VW/fetch-aosp.sh"
+[ -d "$VW/sdk/platforms/android-33" ] || { echo "missing $VW/sdk: run a52sxq/tools/make-vowifi-sdk.sh"; exit 1; }
+( cd "$REPO" && JAVA_HOME="$JAVA_HOME" ANDROID_HOME="$VW/sdk" ./gradlew --no-daemon -q -p a52sxq/vowifi \
+    :iwlan:assembleRelease :qns:assembleRelease )
+mkdir -p "$STAGE/system/priv-app/Iwlan" "$STAGE/system/priv-app/QualifiedNetworksService"
+sign "$VW/iwlan/build/outputs/apk/release/iwlan-release-unsigned.apk" \
+    "$STAGE/system/priv-app/Iwlan/Iwlan.apk"
+sign "$VW/qns/build/outputs/apk/release/qns-release-unsigned.apk" \
+    "$STAGE/system/priv-app/QualifiedNetworksService/QualifiedNetworksService.apk"
+
 echo "== overlays"
 for o in framework:PhhImsFrameworkOverlay phone:PhhImsPhoneOverlay; do
   dir=${o%%:*}; name=${o##*:}; w=$OUT/build-$dir

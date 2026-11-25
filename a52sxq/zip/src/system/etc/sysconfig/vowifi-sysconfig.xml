@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- a52sxq VoWiFi: Iwlan and QNS use platform APIs but are not platform-signed. -->
+<config>
+    <allow-in-power-save package="com.google.android.iwlan" />
+    <hidden-api-whitelisted-app package="com.google.android.iwlan" />
+    <hidden-api-whitelisted-app package="com.android.telephony.qns" />
+</config>

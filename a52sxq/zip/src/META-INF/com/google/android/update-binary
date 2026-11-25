@@ -108,7 +108,9 @@ if [ "$MODE" = "uninstall" ]; then
   sh "$S/etc/phhims/phhims-sepolicy.sh" remove "$S" 2>&1 | while read -r l; do ui_print "  $l"; done
   ui_print "Removing files"
   for f in $FILES; do rm -f "$S/$f"; done
-  rmdir "$S/priv-app/PhhIms" "$S/etc/phhims" 2>/dev/null
+  for d in $(for f in $FILES; do case "$f" in priv-app/*/*|etc/phhims/*) dirname "$f";; esac; done | sort -u); do
+    rmdir "$S/$d" 2>/dev/null
+  done
   rm -f "$S/addon.d/50-phhims.sh"
   ui_print "Done. VoLTE removed; calls use 2G again."
   cleanup
@@ -136,7 +138,10 @@ for f in $FILES; do
   # would be ignored. A fixed future mtime always forces a fresh parse.
   touch -d "2037-12-31 00:00:00" "$dst"
 done
-for d in "$S/priv-app/PhhIms" "$S/etc/phhims"; do
+# Directories this package created (priv-app/<App>, etc/phhims).
+DIRS=$(for f in $FILES; do case "$f" in priv-app/*/*|etc/phhims/*) dirname "$f";; esac; done | sort -u)
+for d in $DIRS; do
+  d="$S/$d"
   chown root:root "$d"; chmod 0755 "$d"; chcon u:object_r:system_file:s0 "$d"
   # For directory packages the package cache is validated against the directory mtime.
   touch -d "2037-12-31 00:00:00" "$d"
@@ -164,5 +169,8 @@ fi
 sync
 ui_print "Done. First boot recompiles sepolicy (a few seconds longer)."
 ui_print "VoLTE registers after boot; check *#*#4636#*#* > Phone info."
+ui_print "Wi-Fi calling: once, via adb (no root needed):"
+ui_print "  adb shell appops set com.google.android.iwlan MANAGE_IPSEC_TUNNELS allow"
+ui_print "then enable Wi-Fi calling in the SIM settings."
 cleanup
 exit 0

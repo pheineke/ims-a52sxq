@@ -12,4 +12,16 @@
         <item>com.android.phone</item>
         <item>me.phh.ims</item>
     </string-array>
+    <!-- Wi-Fi calling: telephony binds QNS for access network selection and Iwlan as the WLAN
+         data/network service (IKEv2/IPsec tunnel to the carrier ePDG). -->
+    <string name="config_qualified_networks_service_package" translatable="false">com.android.telephony.qns</string>
+    <string name="config_wlan_data_service_package" translatable="false">com.google.android.iwlan</string>
+    <string name="config_wlan_network_service_package" translatable="false">com.google.android.iwlan</string>
+    <!-- The A52s launched with Android 11, so IpSecAlgorithm only reports what API 30 makes
+         mandatory. The kernel has both (/proc/crypto); carriers propose AES-XCBC for the ePDG
+         child SA (1&1: integrity 5,2,12,13,14). -->
+    <string-array name="config_optionalIpSecAlgorithms" translatable="false">
+        <item>xcbc(aes)</item>
+        <item>cmac(aes)</item>
+    </string-array>
 </resources>
