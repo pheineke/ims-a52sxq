@@ -117,6 +117,8 @@ class SipHandler(
     )
     private val mcc = carrierSettings.mcc
     private val mnc = carrierSettings.mnc
+    // PhhMmTelFeature.onFeatureReady only creates a SipHandler once the IMSI is readable
+    // (it is null while SIM records load, e.g. after booting in airplane mode).
     private val imsi = subTelephonyManager.subscriberId
 
     // dual-SIM IMS context logging.

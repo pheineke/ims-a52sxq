@@ -1044,6 +1044,22 @@ class PhhMmTelFeature(
             return
         }
 
+        // A52s: after booting in airplane mode, IWLAN can make IMS "ready" before the SIM
+        // records are loaded. SipHandler reads the IMSI once at construction (user, From/To);
+        // creating it now would register as "null@realm" forever. Wait for the IMSI.
+        val imsiReadable = try {
+            mContext.getSystemService(TelephonyManager::class.java)
+                ?.createForSubscriptionId(subId)?.subscriberId != null
+        } catch (t: Throwable) {
+            Rlog.w(TAG, "$slotId cannot read IMSI yet: ${t.message}")
+            false
+        }
+        if (!imsiReadable) {
+            Rlog.w(TAG, "$slotId onFeatureReady before the IMSI is readable; retrying in 2s")
+            readyCheckHandler.postDelayed({ onFeatureReady() }, 2000)
+            return
+        }
+
         if (
             this::sipHandler.isInitialized &&
             SubscriptionManager.isValidSubscriptionId(sipHandlerSubId)
