@@ -2,15 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="me.phh.ims"
     coreApp="true"
-    android:persistent="true"
-    android:sharedUserId="android.uid.system">
+    android:persistent="true">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- a52sxq-proto: system uid gets inet implicitly, a privileged app does not -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- a52sxq-proto: cell info for P-Access-Network-Info; system uid was exempt from LocationAccessPolicy -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
+    <!-- a52sxq-proto: no platform key, so run as a privileged app instead of android.uid.system -->
+    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
+    <uses-permission android:name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS" />
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
