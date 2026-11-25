@@ -20,7 +20,8 @@ components (Iwlan and QualifiedNetworksService), built for the same build.
 | Incoming VoLTE call | should work like incoming Wi-Fi calls (same `200 OK` fix), **not verified on LTE yet** |
 | Calls on LIDL Connect | not tested yet (registration only) |
 | **Wi-Fi calling** (IKEv2/IPsec to the ePDG, IMS over IWLAN) | works on 1&1: registration, outgoing and incoming calls, also in airplane mode and after booting in airplane mode (SIM PIN prompt included) |
-| Wi-Fi calling: LTE ⇄ Wi-Fi handover during a call, LIDL Connect | not tested yet |
+| Wi-Fi → LTE handover during a call | works (stays VoLTE, no fallback to 2G); losing all connectivity mid-call ends the call cleanly |
+| Wi-Fi calling: LTE → Wi-Fi handover during a call, LIDL Connect | not tested yet |
 | Location off, update via `addon.d`, uninstall zip | not tested yet |
 
 Why bother: LineageOS has no IMS stack on Samsung devices, because Samsung's IMS service
@@ -218,6 +219,12 @@ Changes needed on this device:
   call removed the caller's `P-Access-Network-Info` and added none; the network replied with
   a BYE 180 ms later instead of an ACK. The `200 OK` now carries the same access headers as
   outgoing INVITEs.
+- **Calls lost with the connection stayed on screen.** When the IMS connection went away
+  during a call (e.g. airplane mode switched on during a VoLTE call, or Wi-Fi switched off
+  during a Wi-Fi call in airplane mode), the SIP side dropped the call without telling
+  Android, and hanging up did nothing. Such calls are now reported as ended
+  (`CODE_LOCAL_NETWORK_NO_SERVICE`), and hanging up a call the SIP side no longer knows ends
+  it locally.
 - **Booting in airplane mode.** IWLAN can make IMS "ready" before the SIM records are loaded
   (or while the SIM waits for its PIN); the SIP handler then registered without an IMSI
   forever. `onFeatureReady` now waits until the IMSI is readable (a local check, backing off
