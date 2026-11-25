@@ -21,6 +21,10 @@ JARS="
 /apex/com.android.tethering/javalib/framework-connectivity-t.jar
 /apex/com.android.tethering/javalib/framework-connectivity-b.jar
 /apex/com.android.telephonycore/javalib/framework-telephony.jar
+/system/framework/framework-location.jar
+/apex/com.android.wifi/javalib/framework-wifi.jar
+/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar
+/apex/com.android.os.statsd/javalib/framework-statsd.jar
 "
 for j in $JARS; do
   adb shell "[ -f $j ]" && adb pull "$j" "$OUT/dex/" >/dev/null || echo "skip (not on device): $j"
@@ -31,6 +35,8 @@ for f in "$OUT"/dex/*.jar; do
 done
 
 # Order matters: later jars override earlier ones, the device framework wins over the stubs.
+# (framework-location/wifi/ike/statsd are only needed for the VoWiFi apps, see
+# a52sxq/tools/make-vowifi-sdk.sh.)
 c=$OUT/classes
 python3 -I "$REPO/a52sxq/tools/merge-platform-jar.py" "$OUT/platform-api.jar" \
   "$REPO/app/libs/android.jar" \

@@ -1,0 +1,138 @@
+From 720b3a9480da342c8afb32d383a48d683bf8e7a2 Mon Sep 17 00:00:00 2001
+From: a52sxq <a52sxq@localhost>
+Date: Wed, 25 Nov 2026 21:54:38 +0100
+Subject: [PATCH] a52sxq: run as privileged app, relocate net-utils, skip
+ unsupported child SA algorithms
+
+- No sharedUserId android.uid.system (official LineageOS builds use private
+  keys); MANAGE_IPSEC_TUNNELS is then granted through its app-op.
+- com.android.net.module.util imports point to com.google.android.iwlan, like
+  the Soong jarjar rule; the two DnsPacket classes are supplied by the build.
+- EpdgChildSaProposal only proposes algorithms that ChildSaProposal reports as
+  supported. Devices launched before Android 12 do not report AES-XCBC unless
+  config_optionalIpSecAlgorithms lists it, and the IKE library threw
+  IllegalArgumentException for the carrier-configured algorithm, crashing the
+  tunnel bring-up.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ AndroidManifest.xml                            |  4 +++-
+ .../iwlan/epdg/EpdgChildSaProposal.java        | 18 ++++++++++++++++++
+ .../android/iwlan/epdg/NaptrDnsResolver.java   |  6 +++---
+ .../android/iwlan/epdg/SrvDnsResolver.java     |  6 +++---
+ 4 files changed, 27 insertions(+), 7 deletions(-)
+
+diff --git a/AndroidManifest.xml b/AndroidManifest.xml
+index 8edca71..1046628 100644
+--- a/AndroidManifest.xml
++++ b/AndroidManifest.xml
+@@ -1,8 +1,10 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     coreApp="true"
+-    android:sharedUserId="android.uid.system"
+     package="com.google.android.iwlan">
++  <!-- a52sxq: no sharedUserId android.uid.system. Official LineageOS builds are signed with
++       private keys, so this runs as a privileged app. MANAGE_IPSEC_TUNNELS is signature|appop:
++       grant once with `appops set com.google.android.iwlan MANAGE_IPSEC_TUNNELS allow`. -->
+ 
+   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+diff --git a/src/com/google/android/iwlan/epdg/EpdgChildSaProposal.java b/src/com/google/android/iwlan/epdg/EpdgChildSaProposal.java
+index b13f2aa..83e0bbd 100644
+--- a/src/com/google/android/iwlan/epdg/EpdgChildSaProposal.java
++++ b/src/com/google/android/iwlan/epdg/EpdgChildSaProposal.java
+@@ -17,9 +17,13 @@
+ package com.google.android.iwlan.epdg;
+ 
+ import android.net.ipsec.ike.ChildSaProposal;
++import android.util.Log;
+ import android.util.Pair;
+ 
++import java.util.Set;
++
+ public class EpdgChildSaProposal extends EpdgSaProposal {
++    private static final String TAG = "EpdgChildSaProposal";
+     private boolean mAddChildSessionRekeyKePayload = false;
+ 
+     /**
+@@ -75,14 +79,28 @@ public class EpdgChildSaProposal extends EpdgSaProposal {
+             encrAlgos = (isProposed) ? getEncryptionAlgos() : getSupportedEncryptionAlgos();
+         }
+ 
++        // Only propose what this device's IPsec stack implements: the carrier config may list
++        // algorithms (e.g. AES-XCBC) that IpSecAlgorithm does not report for devices launched
++        // before Android 12 unless config_optionalIpSecAlgorithms names them. The IKE library
++        // throws IllegalArgumentException for those, which crashed the tunnel bring-up.
++        Set<Integer> supportedEncryption = ChildSaProposal.getSupportedEncryptionAlgorithms();
+         for (Pair<Integer, Integer> encrAlgo : encrAlgos) {
++            if (!supportedEncryption.contains(encrAlgo.first)) {
++                Log.w(TAG, "Skipping unsupported child SA encryption algorithm " + encrAlgo.first);
++                continue;
++            }
+             saProposalBuilder.addEncryptionAlgorithm(encrAlgo.first, encrAlgo.second);
+         }
+ 
+         if (!isAead) {
+             int[] integrityAlgos =
+                     (isProposed) ? getIntegrityAlgos() : getSupportedIntegrityAlgos();
++            Set<Integer> supportedIntegrity = ChildSaProposal.getSupportedIntegrityAlgorithms();
+             for (int integrityAlgo : integrityAlgos) {
++                if (!supportedIntegrity.contains(integrityAlgo)) {
++                    Log.w(TAG, "Skipping unsupported child SA integrity algorithm " + integrityAlgo);
++                    continue;
++                }
+                 saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
+             }
+         }
+diff --git a/src/com/google/android/iwlan/epdg/NaptrDnsResolver.java b/src/com/google/android/iwlan/epdg/NaptrDnsResolver.java
+index 176728e..2c6a747 100644
+--- a/src/com/google/android/iwlan/epdg/NaptrDnsResolver.java
++++ b/src/com/google/android/iwlan/epdg/NaptrDnsResolver.java
+@@ -27,8 +27,8 @@ import android.net.ParseException;
+ import android.os.CancellationSignal;
+ import android.util.Log;
+ 
+-import com.android.net.module.util.DnsPacket;
+-import com.android.net.module.util.DnsPacketUtils.DnsRecordParser;
++import com.google.android.iwlan.DnsPacket;
++import com.google.android.iwlan.DnsPacketUtils.DnsRecordParser;
+ 
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.RetentionPolicy;
+@@ -246,7 +246,7 @@ final class NaptrDnsResolver {
+                         composeNaptrRecordResult(response.parseNaptrRecords());
+                 mUserExecutor.execute(() -> mUserCallback.onAnswer(result, rcode));
+             } catch (DnsPacket.ParseException e) {
+-                // Convert the com.android.net.module.util.DnsPacket.ParseException to an
++                // Convert the com.google.android.iwlan.DnsPacket.ParseException to an
+                 // android.net.ParseException. This is the type that was used in Q and is implied
+                 // by the public documentation of ERROR_PARSE.
+                 //
+diff --git a/src/com/google/android/iwlan/epdg/SrvDnsResolver.java b/src/com/google/android/iwlan/epdg/SrvDnsResolver.java
+index e3ab64f..b7852df 100644
+--- a/src/com/google/android/iwlan/epdg/SrvDnsResolver.java
++++ b/src/com/google/android/iwlan/epdg/SrvDnsResolver.java
+@@ -26,8 +26,8 @@ import android.net.ParseException;
+ import android.os.CancellationSignal;
+ import android.util.Log;
+ 
+-import com.android.net.module.util.DnsPacket;
+-import com.android.net.module.util.DnsPacketUtils.DnsRecordParser;
++import com.google.android.iwlan.DnsPacket;
++import com.google.android.iwlan.DnsPacketUtils.DnsRecordParser;
+ 
+ import java.net.InetAddress;
+ import java.net.UnknownHostException;
+@@ -320,7 +320,7 @@ final class SrvDnsResolver {
+                 final List<SrvRecordInetAddress> result = composeSrvRecordResult(response);
+                 mUserExecutor.execute(() -> mUserCallback.onAnswer(result, rcode));
+             } catch (DnsPacket.ParseException e) {
+-                // Convert the com.android.net.module.util.DnsPacket.ParseException to an
++                // Convert the com.google.android.iwlan.DnsPacket.ParseException to an
+                 // android.net.ParseException. This is the type that was used in Q and is implied
+                 // by the public documentation of ERROR_PARSE.
+                 //
+-- 
+2.56.0
+

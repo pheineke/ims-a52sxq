@@ -1,0 +1,8 @@
+// Gradle build for AOSP Iwlan and QualifiedNetworksService (android17-release) as privileged
+// apps on LineageOS a52sxq. Sources stay in the AOSP clones next to this directory.
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = "vowifi-a52sxq"
+include ':iwlan', ':qns'

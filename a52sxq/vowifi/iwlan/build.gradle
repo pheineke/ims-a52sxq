@@ -1,0 +1,30 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.google.android.iwlan'
+    // sdk/platforms/android-33/android.jar is the phone's own framework (see platform/).
+    compileSdk 33
+    defaultConfig {
+        applicationId 'com.google.android.iwlan'
+        minSdk 33
+        targetSdk 33
+        versionCode 1001
+        versionName '17-a52sxq-1'
+    }
+    sourceSets.main {
+        manifest.srcFile '../aosp/iwlan/AndroidManifest.xml'
+        java.srcDirs = ['../aosp/iwlan/src', '../stubs/iwlan-flags', '../stubs/net-utils', '../stubs/iwlan-statslog']
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+dependencies {
+    implementation 'com.android.support:support-annotations:28.0.0'
+    implementation 'androidx.annotation:annotation:1.7.1'
+    compileOnly 'com.google.auto.value:auto-value-annotations:1.10.4'
+    annotationProcessor 'com.google.auto.value:auto-value:1.10.4'
+}

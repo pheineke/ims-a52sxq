@@ -29,3 +29,7 @@ keys/*.keystore
 /a52sxq/platform/
 /a52sxq/zip/keys/
 /a52sxq/zip/out/
+/a52sxq/vowifi/aosp/
+/a52sxq/vowifi/sdk/
+/a52sxq/vowifi/.gradle/
+/a52sxq/vowifi/*/build/

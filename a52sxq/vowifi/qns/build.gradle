@@ -1,0 +1,31 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.android.telephony.qns'
+    compileSdk 33
+    defaultConfig {
+        applicationId 'com.android.telephony.qns'
+        minSdk 33
+        targetSdk 33
+        versionCode 1001
+        versionName '17-a52sxq-1'
+    }
+    sourceSets.main {
+        manifest.srcFile '../aosp/qns/AndroidManifest.xml'
+        java.srcDirs = ['../aosp/qns/src', '../stubs/statslib']
+        res.srcDirs = ['../aosp/qns/res']
+        assets.srcDirs = ['../aosp/qns/assets']
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.browser:browser:1.5.0'
+    compileOnly 'com.google.auto.value:auto-value-annotations:1.10.4'
+    annotationProcessor 'com.google.auto.value:auto-value:1.10.4'
+}
