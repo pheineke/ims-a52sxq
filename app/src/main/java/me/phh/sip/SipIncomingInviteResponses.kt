@@ -343,6 +343,9 @@ internal object SipIncomingInviteFinalResponses {
         contact: String,
         body: ByteArray,
         omitFinalSdp: Boolean,
+        // Our own P-Access-Network-Info / Cellular-Network-Info (3GPP TS 24.229 requires the UE
+        // to report its access in responses too). 1&1 BYEs an answered call without it.
+        accessNetworkHeaders: SipHeadersMap = emptyMap(),
     ): SipResponse {
         val finalSdpHeaders = if (!omitFinalSdp) {
             """
@@ -358,6 +361,7 @@ internal object SipIncomingInviteFinalResponses {
             callHeaders - "rseq" - "security-verify" - "p-access-network-info" - "content-type" - "content-length" -
                 "session-expires" - "min-se" - "require" +
                 "Contact: $contact".toSipHeadersMap() +
+                accessNetworkHeaders +
                 sessionTimerHeaders +
                 finalSdpHeaders
 

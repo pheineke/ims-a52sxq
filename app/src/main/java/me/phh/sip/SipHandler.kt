@@ -4597,6 +4597,15 @@ fun onWfcDisabled(reason: String) {
             contact = call.callHeaders["contact"]!!.first(),
             body = finalBody,
             omitFinalSdp = omitFinalSdp,
+            accessNetworkHeaders = SipAccessNetworkHeaders.forOutgoingInvite(
+                logTag = TAG,
+                telephonyManager = subTelephonyManager,
+                registrationTech = imsRegistrationTech,
+                policy = carrierSettings.policy.outgoingPaniPolicy,
+                // P-Visited-Network-ID is a request header; not for the 200 OK.
+                visitedNetworkPolicy = SipCarrierPolicy.OutgoingVisitedNetworkPolicy.NONE,
+                visitedNetworkId = realm,
+            ),
         )
     }
 
