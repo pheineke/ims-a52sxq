@@ -1,0 +1,114 @@
+From 2a097a26737c44cd2e424a515fbee832c29e89f3 Mon Sep 17 00:00:00 2001
+From: a52sxq <a52sxq@localhost>
+Date: Thu, 26 Nov 2026 00:46:43 +0100
+Subject: [PATCH] a52sxq: learn the Wi-Fi link protocol type behind a VPN
+ default network
+
+The link protocol type was only set in onLinkPropertiesChanged while Wi-Fi was
+already available. A VPN default network (e.g. WireGuard) that stays connected
+without an underlying network only gets onCapabilitiesChanged when Wi-Fi comes
+back, so the type stayed UNKNOWN and blockIpv6OnlyWifi kept IWLAN unavailable
+until QNS restarted (Wi-Fi calling dead after booting without Wi-Fi).
+
+Read the link properties when Wi-Fi becomes available, from the non-VPN Wi-Fi
+network rather than the tunnel.
+---
+ .../qns/IwlanNetworkStatusTracker.java        | 58 ++++++++++++++++++-
+ 1 file changed, 56 insertions(+), 2 deletions(-)
+
+diff --git a/src/com/android/telephony/qns/IwlanNetworkStatusTracker.java b/src/com/android/telephony/qns/IwlanNetworkStatusTracker.java
+index cef9690..8505eff 100644
+--- a/src/com/android/telephony/qns/IwlanNetworkStatusTracker.java
++++ b/src/com/android/telephony/qns/IwlanNetworkStatusTracker.java
+@@ -472,6 +472,7 @@ class IwlanNetworkStatusTracker {
+                         mWifiToggleOn = true;
+                         mWifiAvailable = true;
+                         mConnectedDataSub = INVALID_SUB_ID;
++                        refreshWifiLinkProtocolType(network, nc);
+                         notifyIwlanNetworkStatus();
+                     } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                         NetworkSpecifier specifier = nc.getNetworkSpecifier();
+@@ -527,7 +528,7 @@ class IwlanNetworkStatusTracker {
+             if (mWifiAvailable) {
+                 LinkProtocolType prevType = sLinkProtocolType;
+ 
+-                checkWifiLinkProtocolType(linkProperties);
++                checkWifiLinkProtocolType(wifiLinkProperties(network, linkProperties));
+                 if (prevType != LinkProtocolType.IPV6
+                         && sLinkProtocolType == LinkProtocolType.IPV6) {
+                     notifyIwlanNetworkStatus(true);
+@@ -555,9 +556,16 @@ class IwlanNetworkStatusTracker {
+                     if (!mWifiAvailable && mWifiToggleOn) {
+                         mWifiAvailable = true;
+                         mConnectedDataSub = INVALID_SUB_ID;
++                        refreshWifiLinkProtocolType(network, nc);
+                         notifyIwlanNetworkStatus();
+                     } else {
+                         Log.d(sLogTag, "OnCapability : Wifi Available already true");
++                        if (mWifiAvailable && sLinkProtocolType == LinkProtocolType.UNKNOWN) {
++                            refreshWifiLinkProtocolType(network, nc);
++                            if (sLinkProtocolType != LinkProtocolType.UNKNOWN) {
++                                notifyIwlanNetworkStatus(true);
++                            }
++                        }
+                     }
+                 } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                     int activeDataSub = INVALID_SUB_ID;
+@@ -578,7 +586,53 @@ class IwlanNetworkStatusTracker {
+         }
+     }
+ 
+-    private void checkWifiLinkProtocolType(@NonNull LinkProperties linkProperties) {
++    /**
++     * a52sxq: the link protocol type was only learned in onLinkPropertiesChanged. A VPN default
++     * network (e.g. WireGuard) that stays connected without an underlying network only gets
++     * onCapabilitiesChanged when Wi-Fi comes back, so the type stayed UNKNOWN and
++     * blockIpv6OnlyWifi kept IWLAN unavailable until QNS restarted. Read the link properties
++     * whenever Wi-Fi becomes available, from the Wi-Fi network itself rather than the tunnel
++     * (Iwlan builds the ePDG tunnel over Wi-Fi, not over the VPN).
++     */
++    private void refreshWifiLinkProtocolType(Network network, NetworkCapabilities nc) {
++        if (mConnectivityManager == null || network == null) {
++            return;
++        }
++        LinkProperties lp = mConnectivityManager.getLinkProperties(network);
++        LinkProperties wifiLp = wifiLinkProperties(network, lp);
++        if (wifiLp != null) {
++            checkWifiLinkProtocolType(wifiLp);
++        }
++        Log.d(sLogTag, "refreshWifiLinkProtocolType: " + sLinkProtocolType);
++    }
++
++    /** For a VPN default network, the link properties of the non-VPN Wi-Fi network below it. */
++    private LinkProperties wifiLinkProperties(Network network, LinkProperties fallback) {
++        if (mConnectivityManager == null || network == null) {
++            return fallback;
++        }
++        NetworkCapabilities nc = mConnectivityManager.getNetworkCapabilities(network);
++        if (nc == null || !nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
++            return fallback;
++        }
++        for (Network n : mConnectivityManager.getAllNetworks()) {
++            NetworkCapabilities c = mConnectivityManager.getNetworkCapabilities(n);
++            if (c != null
++                    && c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
++                    && !c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
++                LinkProperties lp = mConnectivityManager.getLinkProperties(n);
++                if (lp != null) {
++                    return lp;
++                }
++            }
++        }
++        return fallback;
++    }
++
++    private void checkWifiLinkProtocolType(LinkProperties linkProperties) {
++        if (linkProperties == null) {
++            return;
++        }
+         boolean hasIpv4 = false;
+         boolean hasIpv6 = false;
+         for (LinkAddress linkAddress : linkProperties.getLinkAddresses()) {
+-- 
+2.56.0
+

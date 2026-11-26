@@ -85,8 +85,9 @@ o2 by year end). After that, a phone without VoLTE cannot make or receive normal
   coverage, an emergency call is not possible, even if Wi-Fi calling works.
 - **Wi-Fi calling needs one adb command** after a fresh install (see [Installing](#installing)).
   Until it is run, keep Wi-Fi calling switched off.
-- **VPNs.** QNS (which decides between LTE and Wi-Fi) looks at the default network. With an
-  always-on VPN it once failed to classify the Wi-Fi link and kept IMS on LTE until a reboot.
+- **VPNs.** QNS (which decides between LTE and Wi-Fi) looks at the default network, which is
+  the VPN when one is on. The case where Wi-Fi calling stayed unavailable behind a VPN is
+  fixed (see below); other VPN setups (IPv6-only tunnels, split tunnelling) are untested.
 - **Not done:** video calls, conference calls, RCS. Audio can be a little choppy (jitter
   concealment), echo cancellation is off by default.
 
@@ -211,6 +212,13 @@ Changes needed on this device:
   `IllegalArgumentException`. The RRO now lists `xcbc(aes)` and `cmac(aes)`, and Iwlan skips
   any child SA algorithm `ChildSaProposal` does not support instead of crashing
   (`a52sxq/vowifi/patches/iwlan/`).
+- **Wi-Fi calling unavailable behind a VPN.** QNS learns whether the Wi-Fi link has IPv4/IPv6
+  only from link-property updates of the default network, and blocks IWLAN while the type is
+  unknown (`blockIpv6OnlyWifi`). A VPN such as WireGuard stays connected without an
+  underlying network, so when Wi-Fi came on later (e.g. after booting in airplane mode) only
+  the VPN's capabilities changed, the type stayed `UNKNOWN`, and Android said no calls were
+  possible until QNS restarted. QNS now reads the link properties of the Wi-Fi network itself
+  when Wi-Fi becomes available (`a52sxq/vowifi/patches/qns/`).
 - **1&1 rejects Wi-Fi calls without access information** (`603 Decline`). PhhIms sent no
   `P-Access-Network-Info` over IWLAN. It now sends `IEEE-802.11` and, if a cell was seen,
   `Cellular-Network-Info` with the last LTE cell and its age (3GPP TS 24.229), and 1&1 has a
