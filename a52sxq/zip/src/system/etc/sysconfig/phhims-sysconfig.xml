@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- a52sxq-proto: not platform-signed, so allow hidden API use for this one system app -->
 <config>
+    <!-- Not platform-signed, so allow hidden API use for this one system app. -->
     <hidden-api-whitelisted-app package="me.phh.ims" />
+
+    <!-- With location off, LocationManagerService restricts the location app-ops for every app
+         except providers and this allowlist. Telephony then hands the app a redacted serving
+         cell, the SIP P-Access-Network-Info header is missing, and 1&1 hangs up answered calls.
+         The stock Phone process is exempt because it runs as the phone/system uid. This only
+         lets the app read the serving cell that the carrier already knows; the app does not
+         request GPS or network location. -->
+    <allow-ignore-location-settings package="me.phh.ims" />
 </config>

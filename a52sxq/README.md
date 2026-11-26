@@ -74,8 +74,11 @@ o2 by year end). After that, a phone without VoLTE cannot make or receive normal
 - **Privacy in logs.** The app logs SIP traffic at debug level, including phone numbers,
   IMSI-based identities and the IMEI. Scrub logcat output before posting it anywhere.
 - **Location.** The app reads the serving cell for the `P-Access-Network-Info` SIP header.
-  It is granted location permission and added to the framework's location bypass list
-  (`config_serviceStateLocationAllowedPackages`), like the stock Phone app.
+  It is granted location permission, added to the framework's location bypass list
+  (`config_serviceStateLocationAllowedPackages`), and allowed to ignore the location switch
+  (`<allow-ignore-location-settings>` in `etc/sysconfig/phhims-sysconfig.xml`). So it still
+  reads the serving cell when location is off, like the stock Phone app does. It only reports
+  the cell the carrier already knows; it does not use GPS or network location.
 - **Not certified.** Carriers never approved this stack. It may stop registering, behave
   differently on other carriers, or be blocked. Your carrier must provision VoLTE for your
   SIM; 1&1 and Vodafone-network SIMs registered here, others are untested on this device.
@@ -233,6 +236,11 @@ Changes needed on this device:
   Android, and hanging up did nothing. Such calls are now reported as ended
   (`CODE_LOCAL_NETWORK_NO_SERVICE`), and hanging up a call the SIP side no longer knows ends
   it locally.
+- **Answered calls dropped with location off.** With location off, LocationManagerService
+  restricts the location app-ops for all apps except providers and an allowlist, and the
+  telephony bypass list does not cover that. The app got a redacted serving cell, sent no
+  `P-Access-Network-Info` in the `200 OK`, and 1&1 hung up right after answering (outgoing
+  calls were not affected). The sysconfig entry above exempts the app.
 - **Registration kept the old network type after a handover.** During a call, a switch
   between LTE and Wi-Fi only defers the re-REGISTER. It was released only when the other side
   hung up, so after a local hang-up the phone stayed registered as LTE while it was on Wi-Fi.
