@@ -5280,6 +5280,21 @@ fun onWfcDisabled(reason: String) {
             SipRemoteDialogTermination.localHangupCancellationExtras() +
                 mapOf("call-id" to call.callIdOrEmpty()),
         )
+        // A local hang-up never reaches stopCallRuntime(), so a re-REGISTER deferred during the
+        // call (e.g. LTE -> Wi-Fi handover) was never sent and the registration kept the old tech.
+        releaseDeferredImsReconnectWhenCallGone(SipRemoteDialogTermination.localByeTerminationReason())
+    }
+
+    private fun releaseDeferredImsReconnectWhenCallGone(reason: String, attempt: Int = 0) {
+        if (pendingImsReconnectAfterActiveCallReason == null) {
+            return
+        }
+        // Outgoing calls keep currentCall until the BYE is answered (or times out after 4 s).
+        if (hasActiveOrPendingCallForImsReconnectDeferral() && attempt < 10) {
+            myHandler.postDelayed({ releaseDeferredImsReconnectWhenCallGone(reason, attempt + 1) }, 1_000L)
+            return
+        }
+        runDeferredImsReconnectAfterCallTerminalState(reason)
     }
 
     /*
